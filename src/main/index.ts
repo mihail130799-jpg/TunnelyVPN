@@ -98,7 +98,21 @@ function main() {
     await ctrl.shutdown()
     log.flushSync()
     tray?.destroy()
-    app.exit(0)
+    // Обычный выход Electron (а не мгновенный exit): так загруженное обновление установится при выходе
+    setTimeout(() => app.exit(0), 5000).unref()
+    app.quit()
+  }
+
+  /** Установка загруженного обновления: сначала корректно отключаемся и возвращаем настройки Windows */
+  async function updateNow() {
+    if (!quitting) {
+      quitting = true
+      log.info('Установка обновления')
+      await ctrl.shutdown()
+      log.flushSync()
+      tray?.destroy()
+    }
+    installUpdate()
   }
 
   async function toggle() {
@@ -222,7 +236,7 @@ function main() {
   )
   ipcMain.handle('tunnely:running-apps', () => wrap(() => sys.runningApps()))
   ipcMain.handle('tunnely:check-updates', () => wrap(() => checkForUpdates()))
-  ipcMain.handle('tunnely:install-update', () => installUpdate())
+  ipcMain.handle('tunnely:install-update', () => updateNow())
   ipcMain.on('tunnely:window', (_e, action: 'minimize' | 'maximize' | 'close') => {
     if (!win) return
     if (action === 'minimize') win.minimize()

@@ -22,10 +22,12 @@ win:
   executableName: Tunnely
   requestedExecutionLevel: asInvoker
 nsis:
-  oneClick: false
+  # Установка в один клик только для текущего пользователя (%LOCALAPPDATA%\Programs):
+  # не нужны права администратора ни при установке, ни при автообновлении
+  oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: true
-  allowElevation: true
+  allowElevation: false
+  runAfterFinish: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Tunnely VPN
