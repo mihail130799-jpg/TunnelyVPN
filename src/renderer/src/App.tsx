@@ -66,7 +66,10 @@ export function App() {
           <LogoMark size={46} lit={on} />
           <div className="brand-text">
             <b>Tunnely</b>
-            <small>VPN</small>
+            <div className="brand-sub">
+              <small>VPN</small>
+              <span className="brand-by">by Yancen</span>
+            </div>
           </div>
         </div>
         {NAV.map(([id, label, I]) => (

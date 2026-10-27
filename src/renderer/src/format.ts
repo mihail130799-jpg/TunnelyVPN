@@ -54,7 +54,7 @@ export function countryName(code?: string): string | undefined {
 
 export function protoLabel(type: string): string {
   const map: Record<string, string> = {
-    Vless: 'VLESS', Vmess: 'VMess', Trojan: 'Trojan', Shadowsocks: 'Shadowsocks', ShadowsocksR: 'ShadowsocksR',
+    Vless: 'VLESS', VlessReality: 'VLESS · Reality', Vmess: 'VMess', Trojan: 'Trojan', Shadowsocks: 'Shadowsocks', ShadowsocksR: 'ShadowsocksR',
     Hysteria: 'Hysteria', Hysteria2: 'Hysteria2', Tuic: 'TUIC', WireGuard: 'WireGuard', Socks5: 'SOCKS5', Http: 'HTTP',
     AnyTLS: 'AnyTLS', URLTest: 'Автовыбор', Selector: 'Группа', Fallback: 'Резерв', LoadBalance: 'Балансировка'
   }

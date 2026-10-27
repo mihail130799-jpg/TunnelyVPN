@@ -80,6 +80,8 @@ export interface BridgeResult {
   xray: Record<string, unknown> | null
   /** Адреса серверов, которые обслуживает Xray (в режиме TUN им нужен прямой выход, без петли) */
   servers: string[]
+  /** Исходный протокол для показа в интерфейсе: имя сервера → «VlessReality» / «Vless» */
+  types: Record<string, string>
 }
 
 /**
@@ -92,6 +94,7 @@ export function bridgeToXray(cfg: Record<string, unknown>, ports: number[], user
   const outbounds: Record<string, unknown>[] = []
   const rules: Record<string, unknown>[] = []
   const servers: string[] = []
+  const types: Record<string, string> = {}
   let n = 0
   const newProxies = proxies.map(p => {
     if (!needsXray(p) || n >= ports.length) return p
@@ -107,9 +110,10 @@ export function bridgeToXray(cfg: Record<string, unknown>, ports: number[], user
     outbounds.push(xrayOutbound(p, tag))
     rules.push({ type: 'field', inboundTag: [`in-${tag}`], outboundTag: tag })
     servers.push(String(p.server))
+    types[String(p.name)] = p['reality-opts'] ? 'VlessReality' : 'Vless'
     return { name: p.name, type: 'socks5', server: '127.0.0.1', port, username: user.name, password: user.pass, udp: true }
   })
-  if (!inbounds.length) return { config: cfg, xray: null, servers: [] }
+  if (!inbounds.length) return { config: cfg, xray: null, servers: [], types }
   return {
     config: { ...cfg, proxies: newProxies },
     xray: {
@@ -118,7 +122,8 @@ export function bridgeToXray(cfg: Record<string, unknown>, ports: number[], user
       outbounds: [...outbounds, { tag: 'block', protocol: 'blackhole' }],
       routing: { domainStrategy: 'AsIs', rules }
     },
-    servers
+    servers,
+    types
   }
 }
 

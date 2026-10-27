@@ -177,6 +177,7 @@ test('VLESS Reality уходит в Xray, остальные серверы ос
   assert.equal(ob.streamSettings.security, 'reality')
   assert.deepEqual([ob.streamSettings.realitySettings.fingerprint, ob.streamSettings.realitySettings.publicKey, ob.streamSettings.realitySettings.serverName], ['firefox', 'PBK', 'site.com'])
   assert.deepEqual(r.servers, ['1.2.3.4'])
+  assert.deepEqual(r.types, { '🇷🇺 РАИСЯ ': 'VlessReality' })
 })
 
 test('без серверов Reality Xray не нужен', () => {

@@ -32,6 +32,8 @@ export class Controller extends EventEmitter {
   core = new MihomoCore()
   xray = new XrayProcess()
   private xrayPorts: number[] = []
+  /** Серверы, которые обслуживает Xray: в ядре они выглядят как socks5, в интерфейсе — как исходный протокол */
+  private bridgedTypes: Record<string, string> = {}
   private xrayCrashes: number[] = []
   status: ConnStatus = 'disconnected'
   error?: string
@@ -162,6 +164,7 @@ export class Controller extends EventEmitter {
     }
     const bridged = bridgeToXray(base, this.xrayPorts.slice(0, need), this.xray.user)
     await this.xray.apply(bridged.xray)
+    this.bridgedTypes = bridged.types
     const cfg = buildRuntimeConfig(bridged.config, {
       mixedPort: this.core.mixedPort,
       controllerPort: this.core.controllerPort,
@@ -445,7 +448,7 @@ export class Controller extends EventEmitter {
           const p = proxies[n]
           const isGroup = GROUP_TYPES.has(p?.type ?? '')
           const last = p?.history?.at(-1)?.delay
-          return { name: n, type: p?.type ?? '', isGroup, country: isGroup ? undefined : detectCountry(n), delay: last ?? prevDelays.get(n) ?? null }
+          return { name: n, type: this.bridgedTypes[n] ?? p?.type ?? '', isGroup, country: isGroup ? undefined : detectCountry(n), delay: last ?? prevDelays.get(n) ?? null }
         })
       this.selected = g?.now
       // Для групп «Авто» показываем, какой сервер реально используется

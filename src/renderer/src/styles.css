@@ -62,6 +62,8 @@ svg { flex: none; }
 .brand { display: flex; align-items: center; gap: 12px; padding: 4px 6px 22px; -webkit-app-region: drag; }
 .brand-text b { display: block; font-size: 25px; font-weight: 800; letter-spacing: -.4px; line-height: 1.05; }
 .brand-text small { display: block; font-size: 10px; letter-spacing: 4px; color: var(--cyan); font-weight: 700; margin-top: 2px; }
+.brand-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.brand-by { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; margin-top: 3px; }
 .nav {
   display: flex; align-items: center; gap: 12px; padding: 12px 12px; border-radius: 11px; text-align: left;
   color: var(--muted); font-weight: 600; font-size: 14px; position: relative; transition: background .25s, color .25s;
