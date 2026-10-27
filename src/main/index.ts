@@ -16,9 +16,8 @@ app.setAppUserModelId('app.tunnely.vpn')
 // Отдельная папка данных для автотестов, чтобы не трогать настройки пользователя
 if (process.env.TUNNELY_USER_DATA) app.setPath('userData', process.env.TUNNELY_USER_DATA)
 
-// Меньше процессов: графика и сетевая служба Chromium работают внутри основного процесса,
-// отдельным остаётся только окно интерфейса (оно изолировано ради безопасности)
-app.commandLine.appendSwitch('in-process-gpu')
+// Меньше процессов: сетевая служба Chromium работает внутри основного процесса.
+// Графику (GPU) переносить в основной процесс нельзя: с флагом in-process-gpu окно на Windows остаётся пустым.
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2')
 // Без лишних фоновых служб Chromium
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,CalculateNativeWinOcclusion')

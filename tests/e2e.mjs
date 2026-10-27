@@ -36,6 +36,31 @@ const trace = (proxy) => {
   return { ip: out.match(/ip=(.*)/)?.[1], loc: out.match(/loc=(.*)/)?.[1] }
 }
 
+
+/** Снимок окна с реального экрана средствами Windows: число разных цветов (у пустого окна их единицы) */
+function screenColors(exePath, outPng) {
+  const ps = `
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class TW { [StructLayout(LayoutKind.Sequential)] public struct R { public int L, T, Rt, B; }
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }
+"@
+[TW]::SetProcessDPIAware() | Out-Null
+$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Path -eq '${exePath.replace(/\//g, '\\')}' } | Select-Object -First 1
+if (-not $p) { 'нет окна'; exit 0 }
+[TW]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; Start-Sleep 1
+$r = New-Object TW+R; [TW]::GetWindowRect($p.MainWindowHandle, [ref]$r) | Out-Null
+$b = New-Object System.Drawing.Bitmap ($r.Rt - $r.L), ($r.B - $r.T)
+$g = [System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($r.L, $r.T, 0, 0, $b.Size); $b.Save('${outPng.replace(/\//g, '\\')}')
+$c = @{}; for ($x = 0; $x -lt $b.Width; $x += 12) { for ($y = 0; $y -lt $b.Height; $y += 12) { $c[$b.GetPixel($x, $y).ToArgb()] = 1 } }
+$c.Count`
+  const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps]).toString().trim()
+  return Number(out.split(/\r?\n/).pop()) || 0
+}
+
 const before = sysProxy()
 const coresBefore = coreProcs()
 const direct = trace()
@@ -50,6 +75,11 @@ const win = await app.firstWindow()
 await win.setViewportSize({ width: 1080, height: 720 }).catch(() => {})
 await win.waitForTimeout(1800)
 await win.screenshot({ path: join(shots, '1-empty.png') })
+if (exe) {
+  // Проверка настоящего экрана: снимки Chromium выше не заметят, если окно Windows осталось пустым
+  const colors = screenColors(exe, join(shots, '0-real-screen.png'))
+  check('Окно отображается на экране', colors > 60, `цветов на снимке: ${colors}`)
+}
 
 const st = () => win.evaluate(() => window.tunnely.state())
 const waitFor = async (fn, ms = 30000) => {
