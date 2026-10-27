@@ -2,7 +2,7 @@
 // Запуск: TUNNELY_TEST_KEY=<ключ или ссылка на подписку> node tests/e2e.mjs [путь к Tunnely.exe]
 // Ключ берётся только из переменной окружения и никуда не записывается.
 import { _electron as electron } from 'playwright-core'
-import { execFileSync, execSync } from 'node:child_process'
+import { execFile, execFileSync, execSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
@@ -23,7 +23,13 @@ const check = (name, ok, extra = '') => {
   console.log(`${ok ? '✔' : '✖'} ${name}${extra ? ` — ${extra}` : ''}`)
 }
 const sysProxy = () => JSON.parse(execFileSync(helper, ['proxy', 'json']).toString())
-const coreProcs = () => execSync('tasklist /FI "IMAGENAME eq mihomo.exe" /FO CSV /NH').toString().split('\n').filter(l => l.includes('mihomo.exe')).length
+const countProc = image => execSync(`tasklist /FI "IMAGENAME eq ${image}" /FO CSV /NH`).toString().split('\n').filter(l => l.includes(image)).length
+const coreProcs = () => countProc('mihomo.exe') + countProc('tunnely-xray.exe')
+/** Много одновременных соединений, как у браузера */
+const burst = async (proxy, n) => {
+  const one = i => new Promise(resolve => execFile('curl.exe', ['-s', '-m', '30', '-o', 'NUL', '-w', '%{http_code}', '-H', 'Connection: close', '-x', `http://${proxy}`, `https://www.cloudflare.com/cdn-cgi/trace?b${i}`], (_e, out) => resolve(String(out).trim() === '200')))
+  return (await Promise.all(Array.from({ length: n }, (_, i) => one(i)))).filter(Boolean).length
+}
 const trace = (proxy) => {
   const args = ['-s', '-m', '20', 'https://www.cloudflare.com/cdn-cgi/trace']
   if (proxy) args.unshift('-x', proxy)
@@ -112,6 +118,8 @@ try {
 
   const via = trace(`http://${p.server}`)
   check('Трафик идёт через VPN', !!via.ip && via.ip !== direct.ip, `страна ${via.loc}`)
+  const okBurst = await burst(p.server, 20)
+  check('20 одновременных соединений через VPN', okBurst >= 19, `успешно ${okBurst} из 20`)
   await win.waitForTimeout(2500)
   await win.screenshot({ path: join(shots, '2-connected.png') })
 
@@ -141,6 +149,21 @@ try {
   const own = await routeOf('example.com')
   check('Своё исключение example.com напрямую', own === 'DIRECT', own)
   await win.evaluate(() => window.tunnely.setSettings({ bypassDomains: [] }))
+
+  // Режим 3: через VPN только российское и выбранное, остальное напрямую
+  await win.evaluate(() => window.tunnely.setSettings({ mode: 'ru' }))
+  const ruOnly = await routeOf('ya.ru')
+  check('Режим «только РФ»: ya.ru через VPN', !!ruOnly && ruOnly !== 'DIRECT', ruOnly)
+  const otherOnly = await routeOf('example.com')
+  check('Режим «только РФ»: example.com напрямую', otherOnly === 'DIRECT', otherOnly)
+  await win.evaluate(() => window.tunnely.setSettings({ vpnDomains: ['example.com'] }))
+  const ownVpn = await routeOf('example.com')
+  check('Режим «только РФ»: свой сайт example.com через VPN', !!ownVpn && ownVpn !== 'DIRECT', ownVpn)
+  await win.click('.nav:has-text("Режимы")')
+  await win.waitForTimeout(800)
+  await win.screenshot({ path: join(shots, 'modes-ru.png') })
+  await win.click('.nav:has-text("Главная")')
+  await win.evaluate(() => window.tunnely.setSettings({ mode: 'smart', vpnDomains: [] }))
 
   const fastest = await win.evaluate(() => window.tunnely.selectFastest())
   check('Выбор самого быстрого', fastest.ok, fastest.data ?? fastest.error)

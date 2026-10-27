@@ -1,8 +1,8 @@
 // Общие типы для основного процесса и интерфейса
 
 export type ConnStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'disconnecting'
-/** smart — всё через VPN, кроме исключений; all — весь трафик через VPN */
-export type ProxyMode = 'smart' | 'all'
+/** smart — всё через VPN, кроме исключений; all — весь трафик через VPN; ru — через VPN только российские сайты и выбранное */
+export type ProxyMode = 'smart' | 'all' | 'ru'
 export type ConnectionMethod = 'sysproxy' | 'tun'
 
 export interface UserInfo {
@@ -41,6 +41,9 @@ export interface Settings {
   /** Свои исключения: сайты (домены) и программы (имя .exe), которые работают в обход VPN */
   bypassDomains: string[]
   bypassApps: string[]
+  /** Режим «Только РФ через VPN»: свои сайты и программы, которые идут через VPN */
+  vpnDomains: string[]
+  vpnApps: string[]
   connection: ConnectionMethod
   autostart: boolean
   connectOnStart: boolean

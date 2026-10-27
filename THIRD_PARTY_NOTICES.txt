@@ -8,8 +8,13 @@ Mihomo (Clash Meta) — сетевое ядро
     - клиент REALITY сообщает версию 26.10.21 вместо 1.8.2;
     - всегда предлагается обмен ключами X25519MLKEM768;
     - для REALITY отпечаток Firefox заменяется на Chrome.
-  Полный текст изменений: patches/mihomo-reality-version.diff в исходном коде Tunnely.
+  Полный текст изменений: patches/mihomo-tunnely.diff в исходном коде Tunnely.
   Изменённый исходный код ядра предоставляется по запросу на тех же условиях GPL-3.0.
+
+Xray-core — модуль для серверов VLESS Reality
+  Лицензия: Mozilla Public License 2.0 (текст: core\XRAY-LICENSE.txt)
+  Исходный код: https://github.com/XTLS/Xray-core
+  Поставляется без изменений как отдельная программа (core	unnely-xray.exe — переименованный официальный xray.exe).
 
 Electron — https://github.com/electron/electron (MIT)
 React — https://github.com/facebook/react (MIT)

@@ -1,7 +1,7 @@
 {
   "name": "tunnely",
   "productName": "Tunnely VPN",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Tunnely VPN — клиент для подключения к VPN",
   "author": "Tunnely",
   "license": "UNLICENSED",
@@ -10,9 +10,10 @@
   "scripts": {
     "build-core": "node scripts/build-core.mjs",
     "fetch-core": "node scripts/fetch-core.mjs",
+    "fetch-xray": "node scripts/fetch-xray.mjs",
     "build-helper": "node scripts/build-helper.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "prepare-resources": "npm run build-core && npm run build-helper && npm run icons",
+    "prepare-resources": "npm run build-core && npm run fetch-xray && npm run build-helper && npm run icons",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node --test \"tests/*.test.ts\"",
     "dev": "electron-vite dev",

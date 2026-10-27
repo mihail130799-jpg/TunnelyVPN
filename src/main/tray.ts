@@ -45,7 +45,7 @@ export class AppTray {
     this.tray.setToolTip(`Tunnely VPN — ${STATUS_TEXT[s.status]}${on && server ? `\n${server}` : ''}`)
 
     const busy = s.status === 'connecting' || s.status === 'disconnecting'
-    const modes: [AppState['settings']['mode'], string][] = [['smart', 'Умный (с исключениями)'], ['all', 'Весь трафик через VPN']]
+    const modes: [AppState['settings']['mode'], string][] = [['smart', 'Умный (с исключениями)'], ['all', 'Весь трафик через VPN'], ['ru', 'Только российские сайты через VPN']]
     const template: MenuItemConstructorOptions[] = [
       { label: `Tunnely VPN — ${STATUS_TEXT[s.status]}`, enabled: false },
       { type: 'separator' },

@@ -132,9 +132,13 @@ export function killPid(pid: number) {
 
 /** Проверяет, что процесс с этим PID — именно наше ядро */
 export function isCorePid(pid: number): boolean {
+  return isProcessPid(pid, 'mihomo.exe')
+}
+
+export function isProcessPid(pid: number, image: string): boolean {
   try {
     const out = execFileSync('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { windowsHide: true }).toString()
-    return /"mihomo\.exe"/i.test(out)
+    return out.toLowerCase().includes(`"${image.toLowerCase()}"`)
   } catch {
     return false
   }

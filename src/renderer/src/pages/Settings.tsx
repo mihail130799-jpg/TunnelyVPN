@@ -85,10 +85,15 @@ export function SettingsPage({ s, onNeedAdmin }: { s: AppState; onNeedAdmin: () 
           <div>
             <b>Tunnely VPN {s.appVersion}</b>
             <div className="muted">
-              Сетевое ядро Mihomo {s.coreVersion ?? ''} — свободное ПО (GPL-3.0),{' '}
+              Сетевые ядра: Mihomo {s.coreVersion ?? ''} — свободное ПО (
               <button className="link inline" onClick={() => window.tunnely.openUrl('https://github.com/MetaCubeX/mihomo')}>
-                исходный код
+                GPL-3.0
               </button>
+              ,{' '}
+              <button className="link inline" onClick={() => window.tunnely.openUrl('https://github.com/XTLS/Xray-core')}>
+                Xray — MPL-2.0
+              </button>
+              )
               {s.isAdmin && ' · запущено с правами администратора'}
             </div>
           </div>

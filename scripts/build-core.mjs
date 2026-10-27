@@ -64,8 +64,18 @@ if (!code.includes(fpMarker)) {
   code = code.replace(fnRe, `$1${fpMarker}\tif fingerprint.Client == "Firefox" {\n\t\tfingerprint = utls.HelloChrome_Auto\n\t}\n`)
 }
 writeFileSync(realityFile, code)
+
+// На медленных каналах (например, из Азии до Москвы, ~300 мс) рукопожатие VLESS Reality
+// с постквантовым шифрованием иногда длится 6–8 с, а ядро ждёт подключения к серверу всего 5 с. Даём 15 с.
+const tunnelFile = join(src, 'tunnel', 'tunnel.go')
+let tunnel = readFileSync(tunnelFile, 'utf8')
+const toRe = /ctx, cancel := context\.WithTimeout\(context\.Background\(\), C\.DefaultTCPTimeout\)/
+if (toRe.test(tunnel)) tunnel = tunnel.replace(toRe, 'ctx, cancel := context.WithTimeout(context.Background(), 3*C.DefaultTCPTimeout)')
+else if (!tunnel.includes('3*C.DefaultTCPTimeout')) throw new Error('Не найдено место правки таймаута подключения')
+writeFileSync(tunnelFile, tunnel)
+
 mkdirSync(join(root, 'patches'), { recursive: true })
-writeFileSync(join(root, 'patches', 'mihomo-reality-version.diff'), execFileSync('git', ['-C', src, 'diff']).toString())
+writeFileSync(join(root, 'patches', 'mihomo-tunnely.diff'), execFileSync('git', ['-C', src, 'diff']).toString())
 console.log(`Правка применена: версия клиента REALITY ${REALITY_VERSION.join('.')}`)
 
 // ---------- сборка ----------

@@ -4,5 +4,6 @@ release/
 .tools/
 test-results/
 resources/.core-tmp/
+resources/.xray-tmp/
 # Бинарники собираются скриптами (npm run prepare-resources)
 resources/core/*.exe

@@ -35,9 +35,14 @@ export const RU_DOMAINS = [
 ]
 
 export interface Bypass {
+  /** «Умный» режим: российские сайты напрямую */
   ru: boolean
+  /** «Умный» режим: сайты и программы в обход VPN */
   domains: string[]
   apps: string[]
+  /** Режим «Только РФ через VPN»: дополнительные сайты и программы, которые идут через VPN */
+  vpnDomains: string[]
+  vpnApps: string[]
 }
 
 export interface RuntimeOptions {
@@ -66,17 +71,18 @@ export function normalizeApp(input: string): string | undefined {
   return /\.exe$/i.test(name) ? name : `${name}.exe`
 }
 
-function bypassRules(b: Bypass): string[] {
+/** Правила для набора сайтов и программ: все они направляются в target (DIRECT или группу серверов) */
+function routeRules(withRu: boolean, domainList: string[], apps: string[], target: string): string[] {
   const domains = new Set<string>()
-  if (b.ru) RU_DOMAINS.forEach(d => domains.add(d))
-  for (const d of b.domains) {
+  if (withRu) RU_DOMAINS.forEach(d => domains.add(d))
+  for (const d of domainList) {
     const n = normalizeDomain(d)
     if (n) domains.add(n)
   }
-  const rules = [...domains].map(d => `DOMAIN-SUFFIX,${d},DIRECT`)
-  for (const a of b.apps) {
+  const rules = [...domains].map(d => `DOMAIN-SUFFIX,${d},${target}`)
+  for (const a of apps) {
     const n = normalizeApp(a)
-    if (n) rules.push(`PROCESS-NAME,${n},DIRECT`)
+    if (n) rules.push(`PROCESS-NAME,${n},${target}`)
   }
   return rules
 }
@@ -88,18 +94,27 @@ export function mainGroupFromConfig(cfg: Record<string, unknown>): string {
 }
 
 /** Конфигурация для профиля из набора ключей (vless://…): ядро само разберёт ссылки из файла-провайдера */
-export function linksBaseConfig(providerPath: string): Record<string, unknown> {
+export function linksBaseConfig(providerPath: string | undefined, proxies: Record<string, unknown>[] = []): Record<string, unknown> {
+  // Серверы, разобранные самим Tunnely (VLESS Reality — их обслуживает Xray), идут явным списком,
+  // остальные ссылки ядро Mihomo разбирает само из файла-провайдера
+  const names = proxies.map(p => String(p.name))
+  const use = providerPath ? { use: [LINKS_PROVIDER] } : {}
   return {
-    'proxy-providers': {
-      [LINKS_PROVIDER]: {
-        type: 'file',
-        path: providerPath,
-        'health-check': { enable: true, url: TEST_URL, interval: 600, lazy: true }
-      }
-    },
+    ...(proxies.length ? { proxies } : {}),
+    ...(providerPath
+      ? {
+          'proxy-providers': {
+            [LINKS_PROVIDER]: {
+              type: 'file',
+              path: providerPath,
+              'health-check': { enable: true, url: TEST_URL, interval: 600, lazy: true }
+            }
+          }
+        }
+      : {}),
     'proxy-groups': [
-      { name: MAIN_GROUP, type: 'select', proxies: [AUTO_GROUP], use: [LINKS_PROVIDER] },
-      { name: AUTO_GROUP, type: 'url-test', use: [LINKS_PROVIDER], url: TEST_URL, interval: 300, tolerance: 50, lazy: false }
+      { name: MAIN_GROUP, type: 'select', proxies: [AUTO_GROUP, ...names], ...use },
+      { name: AUTO_GROUP, type: 'url-test', ...(names.length ? { proxies: names } : {}), ...use, url: TEST_URL, interval: 300, tolerance: 50, lazy: false }
     ],
     rules: [...LAN_RULES, `MATCH,${MAIN_GROUP}`]
   }
@@ -131,12 +146,37 @@ export function buildRuntimeConfig(base: Record<string, unknown>, opt: RuntimeOp
     cfg.dns = defaultDns()
   }
   if (opt.tun) (cfg.dns as Record<string, unknown>).enable = true
+  // В режимах с прямым трафиком DNS не должен ходить через VPN (как «https://1.1.1.1/dns-query#PROXY» в подписке):
+  // иначе каждый сайт, который открывается напрямую, ждёт ответа DNS через сервер, а при недоступности сервера не открывается вовсе.
+  // Для трафика через VPN DNS не нужен: адрес сайта разрешает сам сервер.
+  if (opt.mode !== 'all') {
+    const d = cfg.dns as Record<string, unknown>
+    for (const key of ['nameserver', 'fallback', 'default-nameserver']) {
+      if (Array.isArray(d[key])) d[key] = [...new Set((d[key] as string[]).map(s => String(s).replace(/#.*$/, '')))]
+    }
+    delete d['nameserver-policy']
+    delete d['respect-rules']
+  }
 
-  // Режимы: «умный» — исключения напрямую, затем правила подписки; «весь трафик» — всё через выбранный сервер
+  // Автовыбор (url-test/fallback) на медленных каналах: даём серверам 10 с на проверку, а не 5 по умолчанию
+  if (Array.isArray(cfg['proxy-groups'])) {
+    for (const g of cfg['proxy-groups'] as Record<string, unknown>[]) {
+      if ((g.type === 'url-test' || g.type === 'fallback') && g.timeout === undefined) g.timeout = 10000
+    }
+  }
+
+  // Режимы:
+  //   smart — исключения напрямую, затем правила подписки;
+  //   all   — всё через выбранный сервер;
+  //   ru    — через VPN только российские сайты и выбранные сайты/программы, остальное напрямую
   const main = mainGroupFromConfig(cfg)
   const baseRules = Array.isArray(cfg.rules) && cfg.rules.length ? (cfg.rules as string[]) : [`MATCH,${main}`]
-  cfg.rules = opt.mode === 'smart' ? [...LAN_RULES, ...bypassRules(opt.bypass), ...baseRules] : [...LAN_RULES, `MATCH,${main}`]
-  const needProcess = opt.mode === 'smart' && opt.bypass.apps.length > 0
+  const b = opt.bypass
+  if (opt.mode === 'smart') cfg.rules = [...LAN_RULES, ...routeRules(b.ru, b.domains, b.apps, 'DIRECT'), ...baseRules]
+  else if (opt.mode === 'ru') cfg.rules = [...LAN_RULES, ...routeRules(true, b.vpnDomains, b.vpnApps, main), 'MATCH,DIRECT']
+  else cfg.rules = [...LAN_RULES, `MATCH,${main}`]
+  // Определение программы по соединению нужно только когда есть правила по программам
+  const needProcess = (opt.mode === 'smart' && b.apps.length > 0) || (opt.mode === 'ru' && b.vpnApps.length > 0)
 
   return {
     ...cfg,

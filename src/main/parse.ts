@@ -136,6 +136,58 @@ export function maskUrl(url: string): string {
   }
 }
 
+/** Разбор ссылки vless://… в сервер в формате Mihomo (нужен, чтобы передать серверы Reality в Xray) */
+export function parseVlessLink(link: string): Record<string, unknown> | undefined {
+  let u: URL
+  try {
+    u = new URL(link.trim())
+  } catch {
+    return
+  }
+  if (u.protocol !== 'vless:' || !u.username || !u.port) return
+  const q = u.searchParams
+  const get = (k: string) => q.get(k) ?? undefined
+  let name = ''
+  try {
+    name = decodeURIComponent(u.hash.slice(1)).trim()
+  } catch {
+    name = u.hash.slice(1)
+  }
+  const host = u.hostname.replace(/^\[|\]$/g, '')
+  const security = get('security') ?? 'none'
+  const network = get('type') ?? 'tcp'
+  const p: Record<string, unknown> = {
+    name: name || `${host}:${u.port}`,
+    type: 'vless',
+    server: host,
+    port: Number(u.port),
+    uuid: decodeURIComponent(u.username),
+    udp: true,
+    network
+  }
+  if (get('flow')) p.flow = get('flow')
+  if (get('encryption')) p.encryption = get('encryption')
+  if (security === 'tls' || security === 'reality') {
+    p.tls = true
+    if (get('sni')) p.servername = get('sni')
+    if (get('fp')) p['client-fingerprint'] = get('fp')
+    if (get('alpn')) p.alpn = get('alpn')!.split(',')
+    if (get('allowInsecure') === '1') p['skip-cert-verify'] = true
+  }
+  if (security === 'reality') {
+    p['reality-opts'] = {
+      'public-key': get('pbk'),
+      'short-id': get('sid') ?? '',
+      ...(get('spx') ? { 'spider-x': get('spx') } : {}),
+      ...(get('pqv') ? { 'mldsa65-verify': get('pqv') } : {})
+    }
+  }
+  if (network === 'ws') p['ws-opts'] = { path: get('path') ?? '/', ...(get('host') ? { headers: { Host: get('host') } } : {}) }
+  if (network === 'grpc') p['grpc-opts'] = { 'grpc-service-name': get('serviceName') ?? '' }
+  if (network === 'xhttp') p['xhttp-opts'] = { path: get('path') ?? '/', host: get('host') ?? '', mode: get('mode') ?? 'auto' }
+  return p
+}
+
 /** Название профиля из ключей: из #имени первой ссылки */
 export function nameFromLinks(links: string[]): string {
   const first = links[0]

@@ -9,7 +9,8 @@ import { store, encryptSecret, decryptSecret, type StoredProfile } from './store
 import { profilesDir } from './paths'
 import { log } from './logger'
 import { linksBaseConfig } from './config'
-import { parseUserInput, parseSubscriptionBody, parseUserInfo, parseTitle, parseFilename, maskUrl, nameFromLinks } from './parse'
+import { parseUserInput, parseSubscriptionBody, parseUserInfo, parseTitle, parseFilename, maskUrl, nameFromLinks, parseVlessLink } from './parse'
+import { needsXray } from './bridge'
 
 const baseFile = (id: string) => join(profilesDir(), `${id}.yaml`)
 const linksFile = (id: string) => join(profilesDir(), `${id}.links.txt`)
@@ -45,8 +46,22 @@ function countServers(config: Record<string, unknown>, links?: string[]): number
 /** Записывает базовую конфигурацию профиля на диск (папка пользователя) */
 function writeContent(id: string, content: { kind: 'config'; config: Record<string, unknown> } | { kind: 'links'; links: string[] }): number {
   if (content.kind === 'links') {
-    writeFileSync(linksFile(id), content.links.join('\n'))
-    writeFileSync(baseFile(id), yamlDump(linksBaseConfig(`./profiles/${id}.links.txt`)))
+    // VLESS Reality разбираем сами (их обслуживает Xray), остальное оставляем ядру Mihomo
+    const own: Record<string, unknown>[] = []
+    const rest: string[] = []
+    const used = new Set<string>()
+    for (const l of content.links) {
+      const p = parseVlessLink(l)
+      if (p && needsXray(p)) {
+        let name = String(p.name)
+        for (let k = 2; used.has(name); k++) name = `${p.name} ${k}`
+        used.add(name)
+        own.push({ ...p, name })
+      } else rest.push(l)
+    }
+    if (rest.length) writeFileSync(linksFile(id), rest.join('\n'))
+    else rmSync(linksFile(id), { force: true })
+    writeFileSync(baseFile(id), yamlDump(linksBaseConfig(rest.length ? `./profiles/${id}.links.txt` : undefined, own), { lineWidth: -1 }))
     return content.links.length
   }
   rmSync(linksFile(id), { force: true })

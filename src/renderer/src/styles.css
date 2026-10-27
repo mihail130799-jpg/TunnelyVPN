@@ -346,7 +346,7 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 
 /* ---------- Режимы ---------- */
 .modes-scroll { overflow-y: auto; padding-right: 6px; padding-bottom: 10px; }
-.mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.mode-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
 .mode-card {
   display: flex; gap: 14px; align-items: flex-start; text-align: left; padding: 18px; border-radius: 16px;
   background: var(--card); border: 1px solid var(--line); transition: border-color .25s, transform .25s;
@@ -383,4 +383,4 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 .app-item.on .check { background: var(--grad); border-color: transparent; }
 .app-item .check svg { width: 13px; height: 13px; }
 .center { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; }
-@media (max-width: 900px) { .mode-cards { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .mode-cards { grid-template-columns: 1fr; } .mode-card { padding: 14px 16px; } }

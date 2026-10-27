@@ -6,7 +6,9 @@ import { dump as yamlDump } from 'js-yaml'
 import { EventEmitter } from 'node:events'
 import type { AppState, ConnStatus, ServerInfo, Settings, TrafficSample, ConnectionItem } from '../shared/types'
 import { detectCountry } from '../shared/country'
-import { MihomoCore } from './core'
+import { MihomoCore, freePort } from './core'
+import { XrayProcess } from './xray'
+import { bridgeToXray, countXrayProxies, tunLoopGuardRules } from './bridge'
 import { buildRuntimeConfig, pickMainGroup, TEST_URL } from './config'
 import { store } from './store'
 import { coreHome } from './paths'
@@ -22,10 +24,15 @@ interface ProxyApiItem {
   history?: { delay: number }[]
 }
 
+const MODE_NAMES: Record<Settings['mode'], string> = { smart: 'умный', all: 'весь трафик через VPN', ru: 'только российские сайты через VPN' }
+
 const GROUP_TYPES = new Set(['Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay'])
 
 export class Controller extends EventEmitter {
   core = new MihomoCore()
+  xray = new XrayProcess()
+  private xrayPorts: number[] = []
+  private xrayCrashes: number[] = []
   status: ConnStatus = 'disconnected'
   error?: string
   connectedAt?: number
@@ -67,7 +74,7 @@ export class Controller extends EventEmitter {
       settings: s.settings,
       isAdmin: this.isAdmin,
       appVersion: app.getVersion(),
-      coreVersion: this.core.version,
+      coreVersion: this.core.version ? `${this.core.version}${this.xray.version ? ` · Xray ${this.xray.version}` : ''}` : undefined,
       coreRunning: this.core.running,
       update: this.update
     }
@@ -95,6 +102,9 @@ export class Controller extends EventEmitter {
   async init() {
     this.isAdmin = await sys.isAdmin()
     await this.core.readVersion()
+    await this.xray.readVersion()
+    this.xray.on('crash', () => void this.onXrayCrash())
+    this.xray.on('started', pid => store.update(s => { s.xrayPid = pid }))
     await this.recoverAfterCrash()
     this.core.on('crash', () => this.onCoreCrash())
     this.core.on('started', pid => {
@@ -121,6 +131,7 @@ export class Controller extends EventEmitter {
       log.warn('Найдено ядро от прошлого сеанса — завершаем')
       sys.killPid(s.corePid)
     }
+    if (s.xrayPid && sys.isProcessPid(s.xrayPid, 'tunnely-xray.exe')) sys.killPid(s.xrayPid)
     if (s.proxyBackup) {
       log.warn('Прошлый сеанс завершился аварийно — восстанавливаем системный прокси')
       try {
@@ -132,21 +143,44 @@ export class Controller extends EventEmitter {
     store.update(st => {
       delete st.proxyBackup
       delete st.corePid
+      delete st.xrayPid
     })
   }
 
-  private writeRuntime(tun: boolean): string {
+  /**
+   * Пишет конфигурацию ядра. Серверы VLESS Reality передаются официальному Xray (см. bridge.ts),
+   * Xray запускается/перезапускается до того, как ядро получит новую конфигурацию.
+   */
+  private async writeRuntime(tun: boolean): Promise<string> {
     const id = store.state.activeProfileId
     if (!id) throw new Error('Добавьте ключ или подписку, чтобы подключиться')
     const base = profiles.loadBaseConfig(id)
-    const cfg = buildRuntimeConfig(base, {
+    const need = countXrayProxies(base)
+    while (this.xrayPorts.length < need) {
+      const p = await freePort()
+      if (!this.xrayPorts.includes(p)) this.xrayPorts.push(p)
+    }
+    const bridged = bridgeToXray(base, this.xrayPorts.slice(0, need), this.xray.user)
+    await this.xray.apply(bridged.xray)
+    const cfg = buildRuntimeConfig(bridged.config, {
       mixedPort: this.core.mixedPort,
       controllerPort: this.core.controllerPort,
       secret: this.core.secret,
       mode: this.settings.mode,
       tun,
-      bypass: { ru: this.settings.bypassRu, domains: this.settings.bypassDomains, apps: this.settings.bypassApps }
+      bypass: {
+        ru: this.settings.bypassRu,
+        domains: this.settings.bypassDomains,
+        apps: this.settings.bypassApps,
+        vpnDomains: this.settings.vpnDomains,
+        vpnApps: this.settings.vpnApps
+      }
     })
+    if (tun && bridged.servers.length) {
+      // В режиме TUN подключения самого Xray к серверам должны идти мимо TUN, иначе получится петля
+      cfg.rules = [...tunLoopGuardRules(bridged.servers), ...(cfg.rules as string[])]
+      cfg['find-process-mode'] = 'strict'
+    }
     const path = join(coreHome(), 'runtime.yaml')
     writeFileSync(path, yamlDump(cfg, { lineWidth: -1 }))
     return path
@@ -155,7 +189,7 @@ export class Controller extends EventEmitter {
   /** Ядро работает в фоне без перенаправления трафика: это нужно для списка серверов и проверки задержки */
   private async startIdle() {
     await this.core.allocatePorts()
-    const path = this.writeRuntime(false)
+    const path = await this.writeRuntime(false)
     await this.core.test(path)
     await this.core.start(path)
     await this.applySavedSelection()
@@ -172,7 +206,7 @@ export class Controller extends EventEmitter {
       this.setStatus('connecting')
       try {
         await this.core.allocatePorts()
-        const path = this.writeRuntime(tun)
+        const path = await this.writeRuntime(tun)
         await this.core.test(path)
         if (this.core.running) await this.core.reload(path)
         else await this.core.start(path)
@@ -194,7 +228,7 @@ export class Controller extends EventEmitter {
         await this.closeConnections()
         store.update(s => { s.wasConnected = true })
         this.setStatus('connected')
-        log.info(`Подключено (${tun ? 'TUN' : 'системный прокси'}, режим ${this.settings.mode === 'smart' ? 'умный' : 'весь трафик'})`)
+        log.info(`Подключено (${tun ? 'TUN' : 'системный прокси'}, режим «${MODE_NAMES[this.settings.mode]}»)`)
         this.startHealth()
         void this.refreshServers()
         return {}
@@ -233,7 +267,7 @@ export class Controller extends EventEmitter {
     }
     if (this.connectedTun && this.core.running) {
       try {
-        await this.core.reload(this.writeRuntime(false))
+        await this.core.reload(await this.writeRuntime(false))
       } catch {
         // Если ядро не отвечает — останавливаем его, Windows сама уберёт TUN-адаптер
         await this.core.stop()
@@ -251,6 +285,7 @@ export class Controller extends EventEmitter {
       store.update(s => { delete s.proxyBackup })
     }
     if (this.core.pid) sys.killPid(this.core.pid)
+    if (this.xray.pid) sys.killPid(this.xray.pid)
   }
 
   async shutdown() {
@@ -264,7 +299,11 @@ export class Controller extends EventEmitter {
       log.error(`Ошибка при отключении: ${(e as Error).message}`)
     }
     await this.core.stop()
-    store.update(s => { delete s.corePid })
+    await this.xray.stop()
+    store.update(s => {
+      delete s.corePid
+      delete s.xrayPid
+    })
   }
 
   private async closeConnections() {
@@ -294,11 +333,13 @@ export class Controller extends EventEmitter {
     const target = this.effective ?? this.selected
     if (!target) return
     try {
-      const r = await this.core.api<{ delay: number }>('GET', `/proxies/${encodeURIComponent(target)}/delay?timeout=6000&url=${encodeURIComponent(TEST_URL)}`, undefined, 8000)
+      const r = await this.core.api<{ delay: number }>('GET', `/proxies/${encodeURIComponent(target)}/delay?timeout=12000&url=${encodeURIComponent(TEST_URL)}`, undefined, 14000)
       this.healthFails = 0
       this.setDelay(target, r.delay)
       this.emitState()
     } catch {
+      // Проверка могла завершиться уже после отключения — тогда сервер ни при чём
+      if (this.status !== 'connected') return
       this.healthFails++
       this.setDelay(target, 0)
       log.warn(`Сервер «${target}» не отвечает (${this.healthFails}/3)`)
@@ -314,7 +355,7 @@ export class Controller extends EventEmitter {
     log.warn(`Переподключение: ${reason}`)
     this.setStatus('reconnecting')
     try {
-      await this.core.reload(this.writeRuntime(this.connectedTun))
+      await this.core.reload(await this.writeRuntime(this.connectedTun))
       await this.applySavedSelection()
       // Если выбран конкретный сервер и он недоступен — переходим на самый быстрый из доступных
       const sel = this.servers.find(s => s.name === this.selected)
@@ -342,7 +383,7 @@ export class Controller extends EventEmitter {
       return
     }
     try {
-      const path = this.writeRuntime(wasConnected && this.connectedTun)
+      const path = await this.writeRuntime(wasConnected && this.connectedTun)
       await this.core.start(path)
       await this.applySavedSelection()
       if (wasConnected) this.setStatus('connected')
@@ -351,6 +392,24 @@ export class Controller extends EventEmitter {
     } catch (e) {
       await this.teardown().catch(() => undefined)
       this.setStatus('disconnected', (e as Error).message)
+    }
+  }
+
+  private async onXrayCrash() {
+    const now = Date.now()
+    this.xrayCrashes = this.xrayCrashes.filter(t => now - t < 5 * 60_000)
+    this.xrayCrashes.push(now)
+    if (this.xrayCrashes.length > 5) {
+      log.error('Xray падает слишком часто — серверы VLESS Reality временно недоступны')
+      this.error = 'Модуль Xray несколько раз аварийно завершился. Подробности — в разделе «Журнал».'
+      this.emitState()
+      return
+    }
+    try {
+      await this.xray.restart()
+      log.info('Xray перезапущен')
+    } catch (e) {
+      log.error(`Не удалось перезапустить Xray: ${(e as Error).message}`)
     }
   }
 
@@ -432,18 +491,18 @@ export class Controller extends EventEmitter {
     if (!this.groupName || !this.core.running) return
     let res: Record<string, number> = {}
     try {
-      res = await this.core.api<Record<string, number>>('GET', `/group/${encodeURIComponent(this.groupName)}/delay?timeout=5000&url=${encodeURIComponent(TEST_URL)}`, undefined, 15000)
+      res = await this.core.api<Record<string, number>>('GET', `/group/${encodeURIComponent(this.groupName)}/delay?timeout=8000&url=${encodeURIComponent(TEST_URL)}`, undefined, 20000)
     } catch (e) {
       // Ошибка API означает, что все серверы группы недоступны
       log.warn(`Проверка задержки: ${(e as Error).message}`)
     }
-    // Не ответившие за 5 с проверяем ещё раз по отдельности с запасом по времени (первое соединение бывает медленным)
+    // Не ответившие за 8 с проверяем ещё раз по отдельности с запасом по времени (первое соединение бывает медленным)
     await Promise.all(
       this.servers
         .filter(s => !s.isGroup && !res[s.name])
         .map(async s => {
           try {
-            const r = await this.core.api<{ delay: number }>('GET', `/proxies/${encodeURIComponent(s.name)}/delay?timeout=8000&url=${encodeURIComponent(TEST_URL)}`, undefined, 10000)
+            const r = await this.core.api<{ delay: number }>('GET', `/proxies/${encodeURIComponent(s.name)}/delay?timeout=15000&url=${encodeURIComponent(TEST_URL)}`, undefined, 17000)
             res[s.name] = r.delay
           } catch {
             /* сервер недоступен */
@@ -481,7 +540,7 @@ export class Controller extends EventEmitter {
     if (!reloadIfActive) return this.emitState()
     await this.serial(async () => {
       if (this.core.running) {
-        const path = this.writeRuntime(this.connectedTun && this.status !== 'disconnected')
+        const path = await this.writeRuntime(this.connectedTun && this.status !== 'disconnected')
         await this.core.test(path)
         await this.core.reload(path)
         await this.applySavedSelection()
@@ -505,16 +564,16 @@ export class Controller extends EventEmitter {
     const next = this.settings
 
     // Режим и исключения меняют правила маршрутизации — перезагружаем конфигурацию ядра на лету
-    const routing = (['mode', 'bypassRu', 'bypassDomains', 'bypassApps'] as const).some(k => k in patch && JSON.stringify(patch[k]) !== JSON.stringify(prev[k]))
+    const routing = (['mode', 'bypassRu', 'bypassDomains', 'bypassApps', 'vpnDomains', 'vpnApps'] as const).some(k => k in patch && JSON.stringify(patch[k]) !== JSON.stringify(prev[k]))
     if (routing && this.core.running) {
       await this.serial(async () => {
-        const path = this.writeRuntime(this.connectedTun && this.status !== 'disconnected')
+        const path = await this.writeRuntime(this.connectedTun && this.status !== 'disconnected')
         await this.core.test(path)
         await this.core.reload(path)
         await this.applySavedSelection()
         await this.closeConnections()
       })
-      log.info(`Режим: ${next.mode === 'smart' ? 'умный' : 'весь трафик через VPN'}, исключений: сайтов ${next.bypassDomains.length}, программ ${next.bypassApps.length}`)
+      log.info(`Режим: ${MODE_NAMES[next.mode]}`)
     }
     if (patch.connection && patch.connection !== prev.connection) {
       if (next.connection === 'tun' && !this.isAdmin) {

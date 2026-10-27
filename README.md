@@ -64,10 +64,19 @@ npm test
 TUNNELY_TEST_KEY="ваш ключ" node tests/e2e.mjs release/win-unpacked/Tunnely.exe
 ```
 
+## Xray для серверов VLESS Reality
+
+Серверы VLESS Reality (и VLESS с шифрованием, например mlkem768) Tunnely передаёт официальному клиенту Xray
+(`resources/core/tunnely-xray.exe`, скачивается `npm run fetch-xray` с проверкой SHA-256). Ядро Mihomo подключается к нему
+через локальный SOCKS на 127.0.0.1 с одноразовым паролем, поэтому режимы, исключения, статистика и проверка задержки
+работают как обычно. Причина: новые серверы Xray 26.9+ плохо принимают много одновременных соединений от Mihomo
+(в тестах: Mihomo 0 из 20, Xray 20 из 20). В режиме TUN подключения самого Xray к серверам идут мимо TUN (защита от петли).
+Код моста — `src/main/bridge.ts`, процесс — `src/main/xray.ts`.
+
 ## Собственная сборка ядра
 
 Новые серверы Xray (26.7+) отклоняют стандартный Mihomo с ошибкой «REALITY authentication failed». Поэтому `scripts/build-core.mjs`
-собирает Mihomo с тремя правками в `component/tls/reality.go` (текст — `patches/mihomo-reality-version.diff`):
+собирает Mihomo с тремя правками в `component/tls/reality.go` (текст — `patches/mihomo-tunnely.diff`):
 версия клиента REALITY 26.10.21, всегда X25519MLKEM768, отпечаток Chrome вместо Firefox.
 Другая версия ядра: `MIHOMO_TAG=v1.19.34 npm run build-core`. Если правка не применится (Mihomo изменил код), сборка остановится с ошибкой.
 

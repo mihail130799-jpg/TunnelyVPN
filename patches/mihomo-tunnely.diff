@@ -35,3 +35,16 @@ index ff6a0a3..91a3104 100644
  
  		//log.Debugln("REALITY hello.sessionId[:16]: %v", hello.SessionId[:16])
  
+diff --git a/tunnel/tunnel.go b/tunnel/tunnel.go
+index 86dbc14..53a8bae 100644
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -571,7 +571,7 @@ func handleTCPConn(connCtx C.ConnContext) {
+ 	var peekBytes []byte
+ 	var peekLen int
+ 
+-	ctx, cancel := context.WithTimeout(context.Background(), C.DefaultTCPTimeout)
++	ctx, cancel := context.WithTimeout(context.Background(), 3*C.DefaultTCPTimeout)
+ 	defer cancel()
+ 	remoteConn, err := retry(ctx, func(ctx context.Context) (remoteConn C.Conn, err error) {
+ 		remoteConn, err = proxy.DialContext(ctx, dialMetadata)

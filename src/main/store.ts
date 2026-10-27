@@ -37,6 +37,7 @@ export interface PersistedState {
   proxyBackup?: ProxyBackup
   /** PID запущенного ядра — чтобы завершить «зависшее» ядро после сбоя */
   corePid?: number
+  xrayPid?: number
   wasConnected?: boolean
 }
 
@@ -45,6 +46,8 @@ export const DEFAULT_SETTINGS: Settings = {
   bypassRu: true,
   bypassDomains: [],
   bypassApps: [],
+  vpnDomains: [],
+  vpnApps: [],
   connection: 'sysproxy',
   autostart: false,
   connectOnStart: false,
@@ -56,9 +59,11 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 function normalizeSettings(s: Settings): Settings {
-  if (s.mode !== 'smart' && s.mode !== 'all') s.mode = 'smart'
+  if (s.mode !== 'smart' && s.mode !== 'all' && s.mode !== 'ru') s.mode = 'smart'
   if (!Array.isArray(s.bypassDomains)) s.bypassDomains = []
   if (!Array.isArray(s.bypassApps)) s.bypassApps = []
+  if (!Array.isArray(s.vpnDomains)) s.vpnDomains = []
+  if (!Array.isArray(s.vpnApps)) s.vpnApps = []
   return s
 }
 
