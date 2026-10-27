@@ -1,5 +1,6 @@
 // Журнал приложения. Секреты (адреса подписок, UUID, пароли, ключи) вырезаются до записи.
 import { appendFileSync, existsSync, renameSync, statSync } from 'node:fs'
+import { appendFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
 import type { LogLine } from '../shared/types'
@@ -23,6 +24,9 @@ export function redact(text: string): string {
 
 class Logger extends EventEmitter {
   private lines: LogLine[] = []
+  // Запись на диск пачками раз в секунду, а не отдельной синхронной операцией на каждую строку
+  private pending: string[] = []
+  private flushTimer?: NodeJS.Timeout
 
   private file() {
     return join(logsDir(), 'tunnely.log')
@@ -33,13 +37,41 @@ class Logger extends EventEmitter {
     this.lines.push(line)
     if (this.lines.length > MAX_MEMORY) this.lines.splice(0, this.lines.length - MAX_MEMORY)
     this.emit('line', line)
+    this.pending.push(`${new Date(line.t).toISOString()} [${source}/${level}] ${line.text}\n`)
+    this.flushTimer ??= setTimeout(() => void this.flush(), 1000)
+  }
+
+  private rotate(f: string) {
+    if (existsSync(f) && statSync(f).size > MAX_FILE) renameSync(f, f + '.old')
+  }
+
+  private async flush() {
+    this.flushTimer = undefined
+    if (!this.pending.length) return
+    const chunk = this.pending.join('')
+    this.pending = []
     try {
       const f = this.file()
-      if (existsSync(f) && statSync(f).size > MAX_FILE) renameSync(f, f + '.old')
-      appendFileSync(f, `${new Date(line.t).toISOString()} [${source}/${level}] ${line.text}\n`)
+      this.rotate(f)
+      await appendFile(f, chunk)
     } catch {
       /* журнал не должен ронять приложение */
     }
+  }
+
+  /** Дописать остаток при выходе */
+  flushSync() {
+    if (this.flushTimer) clearTimeout(this.flushTimer)
+    this.flushTimer = undefined
+    if (!this.pending.length) return
+    try {
+      const f = this.file()
+      this.rotate(f)
+      appendFileSync(f, this.pending.join(''))
+    } catch {
+      /* пропускаем */
+    }
+    this.pending = []
   }
 
   info(t: string) { this.write('info', 'app', t) }

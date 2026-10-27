@@ -16,6 +16,13 @@ app.setAppUserModelId('app.tunnely.vpn')
 // Отдельная папка данных для автотестов, чтобы не трогать настройки пользователя
 if (process.env.TUNNELY_USER_DATA) app.setPath('userData', process.env.TUNNELY_USER_DATA)
 
+// Меньше процессов: графика и сетевая служба Chromium работают внутри основного процесса,
+// отдельным остаётся только окно интерфейса (оно изолировано ради безопасности)
+app.commandLine.appendSwitch('in-process-gpu')
+app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2')
+// Без лишних фоновых служб Chromium
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,CalculateNativeWinOcclusion')
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -89,6 +96,7 @@ function main() {
     quitting = true
     log.info('Завершение работы')
     await ctrl.shutdown()
+    log.flushSync()
     tray?.destroy()
     app.exit(0)
   }

@@ -152,6 +152,42 @@ export class MihomoCore extends EventEmitter {
     return (text ? JSON.parse(text) : undefined) as T
   }
 
+  /** Потоковый запрос к API ядра: onLine вызывается на каждую строку ответа. Возвращает функцию остановки */
+  stream(path: string, onLine: (line: string) => void, onEnd: () => void): () => void {
+    const ctrl = new AbortController()
+    let stopped = false
+    void (async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:${this.controllerPort}${path}`, {
+          headers: { Authorization: `Bearer ${this.secret}` },
+          signal: ctrl.signal
+        })
+        if (!res.ok || !res.body) throw new Error(`API ${res.status}`)
+        const reader = res.body.getReader()
+        const dec = new TextDecoder()
+        let buf = ''
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += dec.decode(value, { stream: true })
+          let i
+          while ((i = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, i).trim()
+            buf = buf.slice(i + 1)
+            if (line) onLine(line)
+          }
+        }
+      } catch {
+        /* ядро остановлено или перезапускается */
+      }
+      if (!stopped) onEnd()
+    })()
+    return () => {
+      stopped = true
+      ctrl.abort()
+    }
+  }
+
   reload(configPath: string) {
     return this.api('PUT', '/configs?force=true', { path: configPath }, 30000)
   }

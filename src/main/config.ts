@@ -144,7 +144,8 @@ export function buildRuntimeConfig(base: Record<string, unknown>, opt: RuntimeOp
     'allow-lan': false,
     'bind-address': '127.0.0.1',
     mode: 'rule',
-    'log-level': 'info',
+    // Только предупреждения и ошибки: на уровне info ядро пишет строку на каждое соединение — это лишняя нагрузка
+    'log-level': 'warning',
     'unified-delay': true,
     'tcp-concurrent': true,
     'find-process-mode': needProcess ? 'strict' : 'off',

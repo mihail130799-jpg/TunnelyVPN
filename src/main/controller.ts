@@ -39,7 +39,7 @@ export class Controller extends EventEmitter {
   private connectedTun = false
   private lastTotals?: { up: number; down: number; t: number }
   private sessionBase = { up: 0, down: 0 }
-  private trafficTimer?: NodeJS.Timeout
+  private trafficStop?: () => void
   private healthTimer?: NodeJS.Timeout
   private subsTimer?: NodeJS.Timeout
   private healthFails = 0
@@ -97,7 +97,10 @@ export class Controller extends EventEmitter {
     await this.core.readVersion()
     await this.recoverAfterCrash()
     this.core.on('crash', () => this.onCoreCrash())
-    this.core.on('started', pid => store.update(s => { s.corePid = pid }))
+    this.core.on('started', pid => {
+      store.update(s => { s.corePid = pid })
+      this.streamTraffic()
+    })
 
     if (store.state.activeProfileId) {
       try {
@@ -106,7 +109,6 @@ export class Controller extends EventEmitter {
         this.error = (e as Error).message
       }
     }
-    this.trafficTimer = setInterval(() => this.pollTraffic(), 1000)
     this.subsTimer = setInterval(() => this.autoUpdateSubscriptions(), 30 * 60_000)
     setTimeout(() => this.autoUpdateSubscriptions(), 15_000)
     this.emitState()
@@ -252,7 +254,8 @@ export class Controller extends EventEmitter {
   }
 
   async shutdown() {
-    clearInterval(this.trafficTimer)
+    this.trafficStop?.()
+    this.trafficStop = () => undefined // больше не переподключаем поток
     clearInterval(this.subsTimer)
     this.stopHealth()
     try {
@@ -553,31 +556,41 @@ export class Controller extends EventEmitter {
     this.sessionBase = this.lastTotals ? { up: this.lastTotals.up, down: this.lastTotals.down } : { up: 0, down: 0 }
   }
 
-  private async pollTraffic() {
-    if (!this.core.running) return
-    try {
-      const r = await this.core.api<{ uploadTotal: number; downloadTotal: number }>('GET', '/connections', undefined, 3000)
+  /**
+   * Статистика приходит потоком от ядра (/traffic — одна короткая строка в секунду),
+   * вместо ежесекундного запроса полного списка соединений.
+   */
+  private streamTraffic() {
+    if (this.trafficStop || !this.core.running) return
+    this.trafficStop = this.core.stream('/traffic', line => {
+      let r: { up: number; down: number; upTotal?: number; downTotal?: number }
+      try {
+        r = JSON.parse(line)
+      } catch {
+        return
+      }
       const t = Date.now()
+      // Общие счётчики есть в новых версиях ядра; если нет — накапливаем сами
       const prev = this.lastTotals
+      const up = r.upTotal ?? (prev?.up ?? 0) + r.up
+      const down = r.downTotal ?? (prev?.down ?? 0) + r.down
       // Счётчики ядра обнуляются после его перезапуска
-      if (prev && (r.uploadTotal < prev.up || r.downloadTotal < prev.down)) this.sessionBase = { up: 0, down: 0 }
-      const dt = prev ? Math.max((t - prev.t) / 1000, 0.2) : 1
+      if (prev && (up < prev.up || down < prev.down)) this.sessionBase = { up: 0, down: 0 }
+      this.lastTotals = { up, down, t }
+      const on = this.status === 'connected'
       const sample: TrafficSample = {
-        up: prev ? Math.max(0, (r.uploadTotal - prev.up) / dt) : 0,
-        down: prev ? Math.max(0, (r.downloadTotal - prev.down) / dt) : 0,
-        upTotal: this.status === 'connected' ? Math.max(0, r.uploadTotal - this.sessionBase.up) : 0,
-        downTotal: this.status === 'connected' ? Math.max(0, r.downloadTotal - this.sessionBase.down) : 0,
+        up: on ? r.up : 0,
+        down: on ? r.down : 0,
+        upTotal: on ? Math.max(0, up - this.sessionBase.up) : 0,
+        downTotal: on ? Math.max(0, down - this.sessionBase.down) : 0,
         t
       }
-      this.lastTotals = { up: r.uploadTotal, down: r.downloadTotal, t }
-      if (this.status !== 'connected') {
-        sample.up = 0
-        sample.down = 0
-      }
       this.emit('traffic', sample)
-    } catch {
-      /* ядро перезапускается */
-    }
+    }, () => {
+      // Поток оборвался (перезапуск ядра) — переподключаемся
+      this.trafficStop = undefined
+      setTimeout(() => this.streamTraffic(), 2000)
+    })
   }
 
   async connections(): Promise<ConnectionItem[]> {

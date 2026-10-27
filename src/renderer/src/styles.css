@@ -1,6 +1,6 @@
 :root {
   --bg: #0B0F2E;
-  --card: rgba(21, 26, 69, .55);
+  --card: rgba(21, 26, 69, .74);
   --card-solid: #151A45;
   --line: rgba(165, 176, 214, .14);
   --cyan: #38BDF8;
@@ -41,7 +41,7 @@ svg { flex: none; }
   position: absolute; width: 720px; height: 720px; border-radius: 50%;
   left: calc(50% + 120px); top: 44%; transform: translate(-50%, -50%);
   background: radial-gradient(circle, rgba(124,58,237,.33), rgba(56,189,248,.1) 45%, transparent 70%);
-  filter: blur(20px); animation: breathe 7s ease-in-out infinite; pointer-events: none;
+  animation: breathe 7s ease-in-out infinite; pointer-events: none; will-change: transform, opacity;
 }
 .app.on .glow { background: radial-gradient(circle, rgba(56,189,248,.36), rgba(124,58,237,.2) 45%, transparent 70%); }
 @keyframes breathe { 50% { transform: translate(-50%, -50%) scale(1.12); opacity: .8; } }
@@ -56,7 +56,7 @@ svg { flex: none; }
 /* ---------- Боковое меню ---------- */
 .side {
   position: relative; z-index: 2; padding: 0 14px 16px; display: flex; flex-direction: column; gap: 4px;
-  border-right: 1px solid var(--line); background: rgba(8, 11, 36, .45); backdrop-filter: blur(18px);
+  border-right: 1px solid var(--line); background: rgba(8, 11, 36, .7);
   margin-top: -38px; padding-top: 22px;
 }
 .brand { display: flex; align-items: center; gap: 12px; padding: 4px 6px 22px; -webkit-app-region: drag; }
@@ -143,7 +143,7 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7399; }
 .app.on .pill { color: var(--ok); border-color: rgba(34,211,166,.35); }
-.app.on .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: blink 1.6s infinite; }
+.app.on .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: blink 1.6s infinite; will-change: opacity; }
 .app.busy .dot { background: var(--cyan); animation: blink .6s infinite; }
 @keyframes blink { 50% { opacity: .35; } }
 
@@ -154,26 +154,35 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 .tunnel:disabled { opacity: 1; cursor: progress; }
 .arch { transition: filter 1s; filter: saturate(.35) brightness(.45); }
 .tunnel:hover .arch { filter: saturate(.55) brightness(.65); }
-.st-connecting .arch, .st-reconnecting .arch { animation: ignite 1.2s ease-in-out infinite; }
-.st-connected .arch { filter: saturate(1) brightness(1); animation: shine 3.2s ease-in-out infinite; }
+.st-connecting .arch, .st-reconnecting .arch { filter: saturate(.75) brightness(.75); }
+.st-connected .arch { filter: saturate(1) brightness(1); }
 .st-connected:hover .arch { filter: saturate(1.1) brightness(1.15); }
 .st-disconnecting .arch { filter: saturate(.6) brightness(.7); }
-@keyframes ignite { 0%, 100% { filter: saturate(.35) brightness(.45); } 50% { filter: saturate(.9) brightness(.9); } }
-@keyframes shine { 0%, 100% { filter: saturate(1) brightness(1); } 50% { filter: saturate(1.1) brightness(1.25); } }
 .portal-dark { transition: opacity .9s; }
 .st-connected .portal-dark { opacity: 0; }
 .light { opacity: 0; transition: opacity 1.1s ease-out; transform-origin: 160px 188px; }
-.st-connecting .light, .st-reconnecting .light { opacity: .45; animation: flicker .5s steps(2) infinite; }
-.st-connected .light { opacity: 1; animation: bloom 3.2s ease-in-out infinite; }
-@keyframes flicker { 50% { opacity: .15; } }
-@keyframes bloom { 50% { transform: scale(1.12); } }
+.st-connecting .light, .st-reconnecting .light { opacity: .45; }
+.st-connected .light { opacity: 1; }
 .rays { opacity: 0; transition: opacity 1.4s; transform-origin: 160px 188px; }
-.st-connected .rays { opacity: .55; animation: spin 24s linear infinite; }
+.st-connected .rays { opacity: .55; }
 .road { transition: opacity 1s; opacity: .55; }
 .st-connected .road { opacity: 1; }
-.dash { stroke-dasharray: 9 11; }
-.st-connected .dash, .st-connecting .dash, .st-reconnecting .dash { animation: drive .7s linear infinite; }
-@keyframes drive { to { stroke-dashoffset: 20; } }
+.tunnel { position: relative; }
+/* Пульсирующее сияние и бегущая разметка — отдельные слои, их анимирует видеокарта без перерисовки тоннеля */
+.halo {
+  position: absolute; left: 50%; top: 71.8%; width: 64%; aspect-ratio: 1; margin: -32% 0 0 -32%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(255,255,255,.55), rgba(196,181,253,.28) 30%, rgba(124,58,237,0) 68%);
+  opacity: 0; transition: opacity 1s; will-change: transform, opacity;
+}
+.st-connected .halo { opacity: .8; animation: halo 3.2s ease-in-out infinite; }
+.st-connecting .halo, .st-reconnecting .halo { opacity: .35; animation: flicker .9s ease-in-out infinite; }
+@keyframes halo { 50% { transform: scale(1.14); opacity: 1; } }
+@keyframes flicker { 50% { opacity: .1; } }
+.lane { position: absolute; left: calc(50% - 1.5px); top: 79%; bottom: 0; width: 3px; overflow: hidden; pointer-events: none; opacity: .55; transition: opacity 1s; }
+.lane i { position: absolute; left: 0; right: 0; top: -20px; bottom: 0; background: repeating-linear-gradient(to bottom, #E0E7FF 0 9px, transparent 9px 20px); border-radius: 2px; will-change: transform; }
+.st-connected .lane { opacity: 1; }
+.st-connected .lane i, .st-connecting .lane i, .st-reconnecting .lane i { animation: drive .7s linear infinite; }
+@keyframes drive { to { transform: translateY(20px); } }
 .roadlight { opacity: 0; transition: opacity 1.2s; }
 .st-connected .roadlight { opacity: 1; }
 
@@ -183,7 +192,7 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 .picker { position: relative; width: min(500px, 100%); margin-top: 16px; }
 .server-card {
   width: min(500px, 100%); display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-top: 16px;
-  border-radius: 14px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(16px); cursor: pointer;
+  border-radius: 14px; background: var(--card); border: 1px solid var(--line); cursor: pointer;
   transition: border-color .25s, transform .25s;
 }
 .picker .server-card { margin-top: 0; width: 100%; }
@@ -214,7 +223,7 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 .flag-none { background: rgba(255,255,255,.06); }
 
 .stats { margin-top: 12px; width: min(500px, 100%); display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.stat { padding: 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(16px); min-width: 0; }
+.stat { padding: 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); min-width: 0; }
 .stat small { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .stat b { display: block; font-size: 17px; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stat em { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 600; }
@@ -227,7 +236,7 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 .servers .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; overflow-y: auto; padding: 2px 4px 8px 2px; align-content: start; }
 .srv {
   display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; background: var(--card); text-align: left;
-  border: 1px solid var(--line); backdrop-filter: blur(16px); transition: border-color .25s, transform .25s; animation: pageIn .5s both; min-width: 0;
+  border: 1px solid var(--line); transition: border-color .25s, transform .25s; animation: pageIn .5s both; min-width: 0;
 }
 .srv:hover { transform: translateY(-2px); border-color: rgba(56,189,248,.4); }
 .srv.sel { background: linear-gradient(var(--card-solid), var(--card-solid)) padding-box, var(--grad) border-box; border: 1px solid transparent; }
@@ -292,7 +301,7 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 .about { display: flex; gap: 14px; align-items: center; padding: 6px 4px 10px; font-size: 13px; }
 
 /* ---------- Окна ---------- */
-.modal-bg { position: fixed; inset: 0; background: rgba(3, 4, 18, .6); backdrop-filter: blur(6px); display: grid; place-items: center; z-index: 50; animation: fadeIn .2s; padding: 16px; }
+.modal-bg { position: fixed; inset: 0; background: rgba(3, 4, 18, .6); display: grid; place-items: center; z-index: 50; animation: fadeIn .2s; padding: 16px; }
 @keyframes fadeIn { from { opacity: 0; } }
 .modal { width: min(520px, 100%); background: #12164a; border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 30px 80px rgba(0,0,0,.6); animation: pageIn .3s; cursor: default; }
 .modal p { line-height: 1.55; margin-bottom: 12px; }
@@ -340,7 +349,7 @@ h2 { font-size: 19px; font-weight: 800; margin-bottom: 12px; }
 .mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
 .mode-card {
   display: flex; gap: 14px; align-items: flex-start; text-align: left; padding: 18px; border-radius: 16px;
-  background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(16px); transition: border-color .25s, transform .25s;
+  background: var(--card); border: 1px solid var(--line); transition: border-color .25s, transform .25s;
 }
 .mode-card:hover { transform: translateY(-2px); border-color: rgba(56,189,248,.4); }
 .mode-card.sel { background: linear-gradient(var(--card-solid), var(--card-solid)) padding-box, var(--grad) border-box; border: 1px solid transparent; box-shadow: 0 10px 30px rgba(124,58,237,.25); }

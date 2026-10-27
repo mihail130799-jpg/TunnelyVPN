@@ -111,9 +111,12 @@ export function TunnelButton({ status, onClick, disabled }: { status: ConnStatus
         <g className="road">
           <path d="M146 205 H174 L232 262 H88 Z" fill="url(#roadG)" />
           <path className="roadlight" d="M146 205 H174 L232 262 H88 Z" fill="url(#roadLight)" />
-          <path className="dash" d="M160 207 L160 262" stroke="#E0E7FF" strokeWidth="3" strokeLinecap="round" />
         </g>
       </svg>
+      <span className="halo" />
+      <span className="lane">
+        <i />
+      </span>
     </button>
   )
 }
@@ -127,59 +130,72 @@ export function Particles({ active }: { active: boolean }) {
 
   useEffect(() => {
     const cv = ref.current!
-    const cx = cv.getContext('2d')!
+    const cx = cv.getContext('2d', { alpha: true })!
     let raf = 0
     let W = 0
     let H = 0
-    const dpr = window.devicePixelRatio || 1
+    // Холст в обычном разрешении: частицы мелкие, повышенная чёткость не видна, а нагрузка вчетверо меньше
     const size = () => {
-      W = cv.width = cv.offsetWidth * dpr
-      H = cv.height = cv.offsetHeight * dpr
+      W = cv.width = cv.offsetWidth
+      H = cv.height = cv.offsetHeight
+      target = undefined
+    }
+    // Положение конца тоннеля пересчитываем редко, а не в каждом кадре
+    let target: { x: number; y: number } | undefined
+    let targetAt = 0
+    const findTarget = () => {
+      const portal = document.querySelector('.tunnel .portal-dark')
+      const cr = cv.getBoundingClientRect()
+      if (!portal || !cr.width) return undefined
+      const pr = portal.getBoundingClientRect()
+      return { x: (pr.x + pr.width / 2 - cr.x) / cr.width, y: (pr.y + pr.height / 2 - cr.y) / cr.height }
     }
     size()
     const ro = new ResizeObserver(size)
     ro.observe(cv)
-    const parts = Array.from({ length: 90 }, () => ({ x: Math.random(), y: Math.random(), v: 0.2 + Math.random() * 0.8, r: Math.random() * 1.6 + 0.4 }))
+    const parts = Array.from({ length: 46 }, () => ({ x: Math.random(), y: Math.random(), v: 0.2 + Math.random() * 0.8, r: Math.random() * 1.6 + 0.6 }))
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const FRAME = 1000 / 30 // 30 кадров в секунду достаточно для плавного дрейфа
+    let last = 0
 
-    const frame = () => {
-      cx.clearRect(0, 0, W, H)
-      const portal = document.querySelector('.tunnel .portal-dark')
-      const cr = cv.getBoundingClientRect()
-      let tx = 0.6
-      let ty = 0.4
-      if (portal && cr.width) {
-        const pr = portal.getBoundingClientRect()
-        tx = (pr.x + pr.width / 2 - cr.x) / cr.width
-        ty = (pr.y + pr.height / 2 - cr.y) / cr.height
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame)
+      if (now - last < FRAME) return
+      const dt = Math.min((now - last) / FRAME, 3)
+      last = now
+      if (now - targetAt > 500) {
+        target = findTarget()
+        targetAt = now
       }
-      const on = activeRef.current && !!portal
+      const on = activeRef.current && !!target
+      cx.clearRect(0, 0, W, H)
+      cx.fillStyle = on ? 'rgba(56,189,248,.8)' : 'rgba(56,189,248,.35)'
+      const second: typeof parts = []
       for (const p of parts) {
         if (!reduce) {
           if (on) {
-            const dx = tx - p.x
-            const dy = ty - p.y
+            const dx = target!.x - p.x
+            const dy = target!.y - p.y
             const d = Math.hypot(dx, dy)
-            p.x += (dx / d) * 0.004 * p.v
-            p.y += (dy / d) * 0.004 * p.v
+            p.x += (dx / d) * 0.008 * p.v * dt
+            p.y += (dy / d) * 0.008 * p.v * dt
             if (d < 0.03) {
               const a = Math.random() * Math.PI * 2
-              p.x = tx + Math.cos(a) * 0.7
-              p.y = ty + Math.sin(a) * 0.7
+              p.x = target!.x + Math.cos(a) * 0.7
+              p.y = target!.y + Math.sin(a) * 0.7
             }
           } else {
-            p.y -= 0.0004 * p.v
+            p.y -= 0.0008 * p.v * dt
             if (p.y < 0) p.y = 1
           }
         }
-        cx.beginPath()
-        cx.arc(p.x * W, p.y * H, p.r * dpr, 0, 7)
-        cx.fillStyle = `rgba(${p.v > 0.6 ? '56,189,248' : '167,139,250'},${on ? 0.8 : 0.35})`
-        cx.fill()
+        if (p.v > 0.6) cx.fillRect(p.x * W, p.y * H, p.r * 1.6, p.r * 1.6)
+        else second.push(p)
       }
-      raf = requestAnimationFrame(frame)
+      cx.fillStyle = on ? 'rgba(167,139,250,.8)' : 'rgba(167,139,250,.35)'
+      for (const p of second) cx.fillRect(p.x * W, p.y * H, p.r * 1.6, p.r * 1.6)
     }
-    frame()
+    raf = requestAnimationFrame(frame)
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
