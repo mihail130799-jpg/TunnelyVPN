@@ -1,0 +1,45 @@
+appId: app.tunnely.vpn
+productName: Tunnely VPN
+copyright: © 2026 Tunnely
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+extraResources:
+  - from: resources
+    to: app-resources
+    filter: ["**/*", "!.core-tmp"]
+  - from: THIRD_PARTY_NOTICES.txt
+    to: THIRD_PARTY_NOTICES.txt
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  executableName: Tunnely
+  requestedExecutionLevel: asInvoker
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Tunnely VPN
+  uninstallDisplayName: Tunnely VPN
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  include: build/installer.nsh
+  language: "1049"
+  multiLanguageInstaller: false
+  deleteAppDataOnUninstall: false
+  artifactName: Tunnely-VPN-Setup-${version}.${ext}
+# Автообновление: укажите адрес, где будут лежать новые версии (latest.yml + установщик).
+# Пока адрес-заглушка, приложение не будет искать обновления (см. src/main/updater.ts).
+publish:
+  provider: generic
+  url: https://updates.example.invalid/tunnely/

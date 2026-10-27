@@ -1,0 +1,8 @@
+node_modules/
+out/
+release/
+.tools/
+test-results/
+resources/.core-tmp/
+# Бинарники собираются скриптами (npm run prepare-resources)
+resources/core/*.exe

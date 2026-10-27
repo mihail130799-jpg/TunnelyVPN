@@ -1,0 +1,18 @@
+Tunnely VPN использует следующие сторонние компоненты.
+
+Mihomo (Clash Meta) — сетевое ядро
+  Лицензия: GNU General Public License v3.0
+  Исходный код: https://github.com/MetaCubeX/mihomo
+  Поставляется как отдельная программа (core\mihomo.exe), собранная из исходников версии v1.19.33
+  с изменениями для совместимости с серверами Xray 26.7+ (файл component/tls/reality.go):
+    - клиент REALITY сообщает версию 26.10.21 вместо 1.8.2;
+    - всегда предлагается обмен ключами X25519MLKEM768;
+    - для REALITY отпечаток Firefox заменяется на Chrome.
+  Полный текст изменений: patches/mihomo-reality-version.diff в исходном коде Tunnely.
+  Изменённый исходный код ядра предоставляется по запросу на тех же условиях GPL-3.0.
+
+Electron — https://github.com/electron/electron (MIT)
+React — https://github.com/facebook/react (MIT)
+js-yaml — https://github.com/nodeca/js-yaml (MIT)
+electron-updater — https://github.com/electron-userland/electron-builder (MIT)
+flag-icons — https://github.com/lipis/flag-icons (MIT)
