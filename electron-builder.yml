@@ -37,9 +37,12 @@ nsis:
   language: "1049"
   multiLanguageInstaller: false
   deleteAppDataOnUninstall: false
-  artifactName: Tunnely-VPN-Setup-${version}.${ext}
-# Автообновление: укажите адрес, где будут лежать новые версии (latest.yml + установщик).
-# Пока адрес-заглушка, приложение не будет искать обновления (см. src/main/updater.ts).
+  # Постоянное имя файла — ссылка releases/latest/download/Tunnely-VPN-Setup.exe всегда ведёт на последнюю версию
+  artifactName: Tunnely-VPN-Setup.${ext}
+# Автообновление: приложения проверяют новые версии в GitHub Releases этого репозитория.
+# В релиз нужно загружать три файла из release/: latest.yml, установщик и .blockmap.
 publish:
-  provider: generic
-  url: https://updates.example.invalid/tunnely/
+  provider: github
+  owner: mihail130799-jpg
+  repo: TunnelyVPN
+  releaseType: release

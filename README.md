@@ -4,7 +4,7 @@ Windows-клиент (Windows 10/11, x64) для подключения к VPN �
 
 ## Установка (для клиентов)
 
-1. Запустите `Tunnely-VPN-Setup-1.0.0.exe`.
+1. Скачайте и запустите [Tunnely-VPN-Setup.exe](https://github.com/mihail130799-jpg/TunnelyVPN/releases/latest/download/Tunnely-VPN-Setup.exe).
    Windows может показать окно SmartScreen «Windows защитила ваш компьютер» — нажмите «Подробнее» → «Выполнить в любом случае»
    (окно исчезнет, когда установщик будет подписан сертификатом, см. ниже).
 2. Выберите папку и нажмите «Установить». Права администратора не нужны.
@@ -73,13 +73,22 @@ TUNNELY_TEST_KEY="ваш ключ" node tests/e2e.mjs release/win-unpacked/Tunne
 
 ## Выпуск обновлений
 
-1. Один раз: в `electron-builder.yml` в разделе `publish` замените `url` на адрес папки на вашем сервере (например `https://ваш-сайт/tunnely/`).
-2. Увеличьте `version` в `package.json` (например 1.0.1).
-3. Выполните `npm run dist`.
-4. Загрузите в эту папку на сервере три файла из `release/`: `latest.yml`, `Tunnely-VPN-Setup-<версия>.exe`, `Tunnely-VPN-Setup-<версия>.exe.blockmap`.
+Обновления раздаются через GitHub Releases репозитория https://github.com/mihail130799-jpg/TunnelyVPN.
 
-Установленные приложения проверяют обновления при запуске и каждые 6 часов, скачивают их, сверяют SHA-512 и устанавливают при перезапуске.
-Важно: версии, собранные до шага 1, не знают адрес сервера и не обновятся автоматически — их нужно один раз переустановить.
+1. Увеличьте `version` в `package.json` (например 1.0.2).
+2. Соберите: `npm run dist`.
+3. Создайте релиз и загрузите три файла:
+
+```bash
+gh release create v1.0.2 release/Tunnely-VPN-Setup.exe release/Tunnely-VPN-Setup.exe.blockmap release/latest.yml --title "Tunnely VPN 1.0.2" --notes "Что нового"
+```
+
+Установленные приложения (начиная с 1.0.1) проверяют обновления через 30 секунд после запуска и каждые 6 часов,
+скачивают новую версию, сверяют SHA-512 из `latest.yml` и устанавливают её при перезапуске
+(или сразу — кнопкой «Перезапустить и обновить» в настройках).
+
+Постоянная ссылка для клиентов на последнюю версию:
+https://github.com/mihail130799-jpg/TunnelyVPN/releases/latest/download/Tunnely-VPN-Setup.exe
 
 ## Известные ограничения
 
